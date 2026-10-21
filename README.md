@@ -15,7 +15,7 @@ Freelancers and small agencies find clients by hand. They list businesses, click
 
 > **How discovery works:** `server/services/leadDiscovery.ts` geocodes the area with Nominatim, then asks Overpass for businesses of that category that have a `website` tag. Results are deduplicated by domain and flagged if already imported. Coverage depends on OpenStreetMap, so it's good in most cities but not complete. Respect the public servers' usage policies (Nominatim: max 1 request/s). Data © OpenStreetMap contributors, ODbL.
 
-> **LLM fallback:** outreach drafts use the configured OpenAI-compatible endpoint. If it's missing or fails, the same request goes to **Groq** (`GROQ_API_KEY`, default `llama-3.3-70b-versatile`).
+> **LLM fallback:** outreach drafts use the configured OpenAI-compatible endpoint. If it's missing or fails, the same request goes to **Groq** (`GROQ_API_KEY`, default `openai/gpt-oss-120b`).
 
 ### Tech stack
 TypeScript · React 19 · Vite · tRPC · Express · Drizzle ORM (MySQL) · Tailwind CSS / Radix UI · Vitest

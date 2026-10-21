@@ -24,7 +24,7 @@ describe("Groq fallback", () => {
       expect(r.choices[0].message.content).toContain("HOOK");
       expect(calls[0].url).toBe("https://api.groq.com/openai/v1/chat/completions");
       expect(calls[0].auth).toBe("Bearer test-key");
-      expect(calls[0].body.model).toBe("llama-3.3-70b-versatile");
+      expect(calls[0].body.model).toBe("openai/gpt-oss-120b");
     } finally {
       (ENV as { forgeApiKey: string }).forgeApiKey = original;
     }
@@ -47,7 +47,7 @@ describe("Groq fallback", () => {
       messages: [{ role: "user", content: "x" }],
       response_format: { type: "json_schema", json_schema: { name: "s", schema: { type: "object" } } },
     });
-    expect(out.model).toBe("llama-3.3-70b-versatile");
+    expect(out.model).toBe("openai/gpt-oss-120b");
     expect(out.thinking).toBeUndefined();
     expect(out.response_format).toEqual({ type: "json_object" });
     expect((out.messages as Array<{ content: string }>)[0].content).toContain('{"type":"object"}');

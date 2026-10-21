@@ -346,7 +346,7 @@ export const groqConfigured = () => !!process.env.GROQ_API_KEY;
 
 export function toGroqPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const { thinking, reasoning, model, ...rest } = payload;
-  const out: Record<string, unknown> = { ...rest, model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile" };
+  const out: Record<string, unknown> = { ...rest, model: process.env.GROQ_MODEL || "openai/gpt-oss-120b" };
   const rf = rest.response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;
   if (rf?.type === "json_schema") {
     // Not every Groq model supports json_schema; use JSON mode and put the schema in the prompt.
@@ -363,7 +363,18 @@ export function toGroqPayload(payload: Record<string, unknown>): Record<string, 
 }
 
 async function invokeGroq(payload: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<InvokeResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Number(process.env.GROQ_TIMEOUT_MS) || 30000);
+  try {
+    return await sendGroq(payload, fetchFn, ctrl.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function sendGroq(payload: Record<string, unknown>, fetchFn: typeof fetch, signal: AbortSignal): Promise<InvokeResult> {
   const res = await fetchFn(GROQ_URL, {
+    signal,
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${process.env.GROQ_API_KEY}` },
     body: JSON.stringify(toGroqPayload(payload)),
