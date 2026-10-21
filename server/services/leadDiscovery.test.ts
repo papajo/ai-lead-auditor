@@ -72,9 +72,30 @@ describe("discoverLeads", () => {
       if (url.includes("overpass-api.de")) return new Response("busy", { status: 429 });
       return new Response(JSON.stringify(OVERPASS), { status: 200 });
     }) as unknown as typeof fetch;
-    const leads = await discoverLeads({ area: "Tampa, FL", category: "accountant" }, { fetchFn });
+    const leads = await discoverLeads({ area: "Tampa, FL", category: "accountant" }, { fetchFn, backoffMs: 1 });
     expect(leads).toHaveLength(2);
-    expect(hits).toEqual(["nominatim.openstreetmap.org", "overpass-api.de", "overpass.kumi.systems"]);
+    // busy server retried (1 + 2 retries), then the backup answers
+    expect(hits).toEqual(["nominatim.openstreetmap.org", "overpass-api.de", "overpass-api.de", "overpass-api.de", "overpass.kumi.systems"]);
+  });
+
+  it("retries a busy server with backoff and succeeds when it recovers", async () => {
+    let overpassCalls = 0;
+    const fetchFn = (async (url: string) => {
+      if (url.includes("nominatim")) return new Response(JSON.stringify([{ boundingbox: ["27.8", "28.2", "-82.7", "-82.3"] }]), { status: 200 });
+      overpassCalls++;
+      return overpassCalls < 2 ? new Response("at capacity", { status: 502 }) : new Response(JSON.stringify(OVERPASS), { status: 200 });
+    }) as unknown as typeof fetch;
+    const leads = await discoverLeads({ area: "Tampa, FL", category: "accountant" }, { fetchFn, backoffMs: 1 });
+    expect(leads).toHaveLength(2);
+    expect(overpassCalls).toBe(2);
+  });
+
+  it("gives a clear busy message when every server is at capacity", async () => {
+    const fetchFn = (async (url: string) =>
+      url.includes("nominatim")
+        ? new Response(JSON.stringify([{ boundingbox: ["27.8", "28.2", "-82.7", "-82.3"] }]), { status: 200 })
+        : new Response("at capacity", { status: 502 })) as unknown as typeof fetch;
+    await expect(discoverLeads({ area: "Tampa, FL", category: "accountant" }, { fetchFn, backoffMs: 1 })).rejects.toThrow(/busy right now/);
   });
 
   it("rejects unknown categories and unknown areas", async () => {

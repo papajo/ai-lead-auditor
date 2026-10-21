@@ -53,7 +53,19 @@ export interface DiscoverOptions {
 export interface DiscoveryDeps {
   fetchFn?: typeof fetch;
   timeoutMs?: number;
+  /** First retry delay for busy Overpass servers; doubles each retry. */
+  backoffMs?: number;
+  retriesPerServer?: number;
 }
+
+class HttpStatusError extends Error {
+  constructor(public status: number, host: string) {
+    super(`${host} returned HTTP ${status}`);
+  }
+}
+
+const BUSY = new Set([429, 502, 503, 504]);
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const userAgent = () =>
   `AILeadAuditor/1.0 (+https://github.com/papajo/ai-lead-auditor${process.env.OSM_CONTACT ? `; ${process.env.OSM_CONTACT}` : ""})`;
@@ -67,7 +79,7 @@ async function getJson(fetchFn: typeof fetch, url: string, init: RequestInit, ti
       signal: ctrl.signal,
       headers: { "user-agent": userAgent(), accept: "application/json", ...(init.headers || {}) },
     });
-    if (!res.ok) throw new Error(`${new URL(url).hostname} returned HTTP ${res.status}`);
+    if (!res.ok) throw new HttpStatusError(res.status, new URL(url).hostname);
     return await res.json();
   } finally {
     clearTimeout(t);
@@ -162,19 +174,29 @@ export async function discoverLeads(opts: DiscoverOptions, deps: DiscoveryDeps =
   const body = new URLSearchParams({ data: buildOverpassQuery(bbox, cat.tags, limit) }).toString();
   const errors: string[] = [];
   let json: any;
-  for (const endpoint of endpoints) {
-    try {
-      json = await getJson(
-        fetchFn,
-        endpoint,
-        { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body },
-        timeoutMs,
-      );
-      break;
-    } catch (e) {
-      errors.push(`${new URL(endpoint).hostname}: ${(e as Error).message}`);
+  const retries = deps.retriesPerServer ?? 2;
+  const backoff = deps.backoffMs ?? 2000;
+  outer: for (const endpoint of endpoints) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        json = await getJson(
+          fetchFn,
+          endpoint,
+          { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body },
+          timeoutMs,
+        );
+        break outer;
+      } catch (e) {
+        const busy = e instanceof HttpStatusError && BUSY.has(e.status);
+        errors.push(`${new URL(endpoint).hostname}: ${(e as Error).message}`);
+        // Exponential backoff on "server busy" (as Overpass asks); other errors move to the next server.
+        if (!busy || attempt === retries) break;
+        await sleep(backoff * 2 ** attempt);
+      }
     }
   }
-  if (json === undefined) throw new Error(`OpenStreetMap search unavailable (${errors.join("; ")})`);
+  if (json === undefined) {
+    throw new Error(`OpenStreetMap search servers are busy right now — try again in a minute. (${errors.slice(-2).join("; ")})`);
+  }
   return parseOverpass(json, cat.label, limit);
 }
