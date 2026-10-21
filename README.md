@@ -1,0 +1,29 @@
+# AI Lead Auditor
+
+**Track local-business leads, audit their websites, and draft outreach grounded in what the audit found.**
+
+Freelancers and small agencies find clients by hand. They list businesses, click through websites one by one, and rewrite the same first message dozens of times. AI Lead Auditor puts that pipeline in one app: a lead list with status tracking, a website health check per lead, and an AI-drafted message built from that lead's specific findings.
+
+### What it does
+- **Lead management:** add leads (business name, industry, URL, Google rating) and track them through *New → Contacted → Responded → Converted*, with a timestamped status history
+- **Website health audit**, four checks: mobile responsiveness, CTA clarity, testimonials/social proof, and broken assets. Each lead gets a 0–100 score, findings by severity, and suggested fixes
+- **Outreach drafts** for WhatsApp, Instagram or email, written by an LLM in a *Hook → Value Gap → Offer* structure, kept under 150 words, and grounded in that lead's audit findings
+- **Dashboard:** total leads, audits completed, messages generated, conversion rate; bulk export of selected leads
+
+> **Status of the audit engine:** `server/services/websiteEvaluator.ts` currently returns **simulated** results for the four checks. The data model, scoring, findings/suggestions pipeline and UI are complete, but real page fetching and analysis (viewport meta, CTA detection, testimonial detection, broken-link checks) is the next milestone.
+
+### Tech stack
+TypeScript · React 19 · Vite · tRPC · Express · Drizzle ORM (MySQL) · Tailwind CSS / Radix UI · Vitest
+
+### Run it locally
+```bash
+pnpm install
+# env: DATABASE_URL (MySQL), plus the OAuth and LLM endpoint variables read in server/_core/env.ts
+pnpm db:push
+pnpm dev
+pnpm test
+```
+Scaffolded from a Manus full-stack template. Auth and LLM calls go through that platform's OAuth and an OpenAI-compatible endpoint (`server/_core/llm.ts`), so running it outside Manus means pointing those variables at your own services.
+
+### Responsible use
+The tool drafts messages for a human to review. It is not a bulk sender. Only audit and contact businesses in line with each site's terms and anti-spam law (e.g. CAN-SPAM, and platform rules for WhatsApp/Instagram).
