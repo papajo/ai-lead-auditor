@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
+import { FindLeadsDialog } from "@/components/FindLeadsDialog";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -222,6 +223,7 @@ export default function Home() {
               </div>
             </DialogContent>
           </Dialog>
+          <FindLeadsDialog onImported={() => refetch()} />
         </div>
 
         {/* Leads Table */}

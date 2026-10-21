@@ -339,8 +339,57 @@ const fetchWithBackoff = async (
     : new Error("LLM request failed after exhausting retries");
 };
 
-export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+/** Groq (OpenAI-compatible) is used when the primary endpoint is unconfigured or fails. */
+export const groqConfigured = () => !!process.env.GROQ_API_KEY;
+
+export function toGroqPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const { thinking, reasoning, model, ...rest } = payload;
+  const out: Record<string, unknown> = { ...rest, model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile" };
+  const rf = rest.response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;
+  if (rf?.type === "json_schema") {
+    // Not every Groq model supports json_schema; use JSON mode and put the schema in the prompt.
+    out.response_format = { type: "json_object" };
+    const schema = JSON.stringify(rf.json_schema?.schema ?? {});
+    out.messages = [
+      { role: "system", content: `Respond with a single JSON object matching this JSON schema: ${schema}` },
+      ...((rest.messages as unknown[]) ?? []),
+    ];
+  } else if (rf?.type === "json_object") {
+    out.messages = [{ role: "system", content: "Respond with a single valid JSON object." }, ...((rest.messages as unknown[]) ?? [])];
+  }
+  return out;
+}
+
+async function invokeGroq(payload: Record<string, unknown>, fetchFn: typeof fetch = fetch): Promise<InvokeResult> {
+  const res = await fetchFn(GROQ_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify(toGroqPayload(payload)),
+  });
+  if (!res.ok) {
+    throw new Error(`Groq invoke failed: ${res.status} ${res.statusText} – ${(await res.text()).slice(0, 300)}`);
+  }
+  return (await res.json()) as InvokeResult;
+}
+
+export async function invokeLLM(params: InvokeParams, deps: { fetchFn?: typeof fetch } = {}): Promise<InvokeResult> {
+  const payload = buildPayload(params);
+  if (!ENV.forgeApiKey) {
+    if (groqConfigured()) return invokeGroq(payload, deps.fetchFn);
+    assertApiKey();
+  }
+  try {
+    return await invokePrimary(payload);
+  } catch (err) {
+    if (!groqConfigured()) throw err;
+    console.warn(`[LLM] primary endpoint failed (${(err as Error).message.slice(0, 120)}); falling back to Groq`);
+    return invokeGroq(payload, deps.fetchFn);
+  }
+}
+
+function buildPayload(params: InvokeParams): Record<string, unknown> {
 
   const {
     messages,
@@ -401,6 +450,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
+  return payload;
+}
+
+async function invokePrimary(payload: Record<string, unknown>): Promise<InvokeResult> {
   const response = await fetchWithBackoff(resolveApiUrl(), {
     method: "POST",
     headers: {

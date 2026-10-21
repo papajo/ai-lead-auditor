@@ -18,6 +18,7 @@ import {
 } from "./db";
 import { evaluateWebsite } from "./services/websiteEvaluator";
 import { generateOutreachMessage } from "./services/outreachGenerator";
+import { CATEGORIES, discoverLeads } from "./services/leadDiscovery";
 
 export const appRouter = router({
   system: systemRouter,
@@ -195,6 +196,57 @@ export const appRouter = router({
           throw new Error("Unauthorized");
         }
         return await getStatusHistoryByLeadId(input.leadId);
+      }),
+  }),
+
+  // Free lead discovery from OpenStreetMap (Nominatim + Overpass)
+  discovery: router({
+    categories: protectedProcedure.query(() =>
+      Object.entries(CATEGORIES).map(([id, c]) => ({ id, label: c.label }))
+    ),
+
+    search: protectedProcedure
+      .input(
+        z.object({
+          area: z.string().min(2).max(120),
+          category: z.string().refine(c => c in CATEGORIES, "Unknown category"),
+          limit: z.number().int().min(1).max(50).default(20),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const found = await discoverLeads(input);
+        const existing = await getLeadsByUserId(ctx.user.id);
+        const host = (u: string) => {
+          try {
+            return new URL(u).hostname.replace(/^www\./, "");
+          } catch {
+            return u;
+          }
+        };
+        const have = new Set(existing.map(l => host(l.websiteUrl)));
+        return found.map(l => ({ ...l, alreadyAdded: have.has(host(l.websiteUrl)) }));
+      }),
+
+    importLeads: protectedProcedure
+      .input(
+        z.object({
+          leads: z
+            .array(
+              z.object({
+                businessName: z.string().min(1).max(255),
+                industry: z.string().min(1).max(128),
+                websiteUrl: z.string().url().max(512),
+              })
+            )
+            .min(1)
+            .max(50),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        for (const l of input.leads) {
+          await createLead({ userId: ctx.user.id, ...l });
+        }
+        return { imported: input.leads.length };
       }),
   }),
 
