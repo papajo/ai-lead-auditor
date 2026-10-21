@@ -6,11 +6,11 @@ Freelancers and small agencies find clients by hand. They list businesses, click
 
 ### What it does
 - **Lead management:** add leads (business name, industry, URL, Google rating) and track them through *New → Contacted → Responded → Converted*, with a timestamped status history
-- **Website health audit**, four checks: mobile responsiveness, CTA clarity, testimonials/social proof, and broken assets. Each lead gets a 0–100 score, findings by severity, and suggested fixes
+- **Website health audit** of the live page, four checks: mobile responsiveness, CTA clarity, testimonials/social proof, and broken assets. Each lead gets a 0–100 score, findings by severity, and suggested fixes
 - **Outreach drafts** for WhatsApp, Instagram or email, written by an LLM in a *Hook → Value Gap → Offer* structure, kept under 150 words, and grounded in that lead's audit findings
 - **Dashboard:** total leads, audits completed, messages generated, conversion rate; bulk export of selected leads
 
-> **Status of the audit engine:** `server/services/websiteEvaluator.ts` currently returns **simulated** results for the four checks. The data model, scoring, findings/suggestions pipeline and UI are complete, but real page fetching and analysis (viewport meta, CTA detection, testimonial detection, broken-link checks) is the next milestone.
+> **How the audit works:** `server/services/websiteEvaluator.ts` fetches the live page and checks for a responsive viewport tag, action-worded buttons/links and contact paths (tel/mailto/forms), testimonial/review/rating signals (including schema.org `Review`/`AggregateRating`), and broken images/scripts/stylesheets (up to 25, checked with HEAD then GET). Results are deterministic. 401/403/429 responses count as inconclusive, not broken. Private/internal addresses are refused. Leads are added by hand, and automated lead discovery is not built yet.
 
 ### Tech stack
 TypeScript · React 19 · Vite · tRPC · Express · Drizzle ORM (MySQL) · Tailwind CSS / Radix UI · Vitest
