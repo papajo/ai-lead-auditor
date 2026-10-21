@@ -24,7 +24,7 @@ TypeScript · React 19 · Vite · tRPC · Express · Drizzle ORM (MySQL) · Tail
 ```bash
 pnpm install
 # env: DATABASE_URL (MySQL), plus the OAuth and LLM endpoint variables read in server/_core/env.ts
-# optional: GROQ_API_KEY (LLM fallback), OSM_CONTACT (email for the OpenStreetMap User-Agent)
+# optional: GROQ_API_KEY (LLM fallback), OSM_CONTACT (email for the OpenStreetMap User-Agent), OVERPASS_URL (comma-separated servers, tried in order)
 pnpm db:push
 pnpm dev
 pnpm test

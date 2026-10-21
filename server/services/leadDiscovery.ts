@@ -9,7 +9,7 @@
  * identifying User-Agent; Overpass is a shared public service — keep queries
  * small. OSM data is © OpenStreetMap contributors (ODbL): attribute it.
  *
- * Env (optional): NOMINATIM_URL, OVERPASS_URL, OSM_CONTACT (email for the UA).
+ * Env (optional): NOMINATIM_URL, OVERPASS_URL (comma-separated, tried in order), OSM_CONTACT (email for the UA).
  */
 
 export const CATEGORIES: Record<string, { label: string; tags: Array<[string, string]> }> = {
@@ -154,16 +154,27 @@ export async function discoverLeads(opts: DiscoverOptions, deps: DiscoveryDeps =
     Math.min(e, lon + maxSpan / 2),
   ];
 
-  const overpass = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
-  const json = await getJson(
-    fetchFn,
-    overpass,
-    {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ data: buildOverpassQuery(bbox, cat.tags, limit) }).toString(),
-    },
-    timeoutMs,
-  );
+  // Public Overpass servers are often busy (429/504); try each until one answers.
+  const endpoints = (process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter")
+    .split(",")
+    .map(u => u.trim())
+    .filter(Boolean);
+  const body = new URLSearchParams({ data: buildOverpassQuery(bbox, cat.tags, limit) }).toString();
+  const errors: string[] = [];
+  let json: any;
+  for (const endpoint of endpoints) {
+    try {
+      json = await getJson(
+        fetchFn,
+        endpoint,
+        { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body },
+        timeoutMs,
+      );
+      break;
+    } catch (e) {
+      errors.push(`${new URL(endpoint).hostname}: ${(e as Error).message}`);
+    }
+  }
+  if (json === undefined) throw new Error(`OpenStreetMap search unavailable (${errors.join("; ")})`);
   return parseOverpass(json, cat.label, limit);
 }

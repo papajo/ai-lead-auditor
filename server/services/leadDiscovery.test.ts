@@ -64,6 +64,19 @@ describe("discoverLeads", () => {
     expect(urls[1]).toContain("overpass-api.de");
   });
 
+  it("falls back to the next Overpass server when the first is busy", async () => {
+    const hits: string[] = [];
+    const fetchFn = (async (url: string) => {
+      hits.push(new URL(url).hostname);
+      if (url.includes("nominatim")) return new Response(JSON.stringify([{ boundingbox: ["27.8", "28.2", "-82.7", "-82.3"] }]), { status: 200 });
+      if (url.includes("overpass-api.de")) return new Response("busy", { status: 429 });
+      return new Response(JSON.stringify(OVERPASS), { status: 200 });
+    }) as unknown as typeof fetch;
+    const leads = await discoverLeads({ area: "Tampa, FL", category: "accountant" }, { fetchFn });
+    expect(leads).toHaveLength(2);
+    expect(hits).toEqual(["nominatim.openstreetmap.org", "overpass-api.de", "overpass.kumi.systems"]);
+  });
+
   it("rejects unknown categories and unknown areas", async () => {
     await expect(discoverLeads({ area: "x", category: "nope" })).rejects.toThrow(/Unknown category/);
     const fetchFn = (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
